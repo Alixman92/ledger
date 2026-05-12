@@ -28,9 +28,16 @@
   body { padding: 32px 20px 80px; min-height: 100vh; }
   .container { max-width: 880px; margin: 0 auto; }
 
-  header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 40px; padding-bottom: 24px; border-bottom: 1px solid var(--rule); }
+  header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 40px; padding-bottom: 24px; border-bottom: 1px solid var(--rule); gap: 16px; flex-wrap: wrap; }
   .brand { font-family: 'Fraunces', serif; font-weight: 400; font-style: italic; font-size: 38px; letter-spacing: -0.02em; color: var(--ink); }
   .brand span { font-style: normal; font-weight: 300; color: var(--muted); font-size: 14px; margin-left: 8px; letter-spacing: 0.02em; }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .sync-indicator { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .sync-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted-soft); }
+  .sync-dot.synced { background: var(--positive); }
+  .sync-dot.syncing { background: #c47a3a; animation: pulse 1s infinite; }
+  .sync-dot.error { background: var(--accent); }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
   .currency-select { background: transparent; border: 1px solid var(--rule); border-radius: 6px; padding: 6px 10px; font-family: 'Geist', sans-serif; font-size: 13px; color: var(--ink-soft); cursor: pointer; }
 
   .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 36px; }
@@ -65,12 +72,12 @@
   .data-tools { display: flex; gap: 6px; }
   .btn-ghost { background: transparent; border: 1px solid var(--rule); border-radius: 6px; padding: 6px 12px; font-family: 'Geist', sans-serif; font-size: 12px; color: var(--ink-soft); cursor: pointer; font-weight: 500; }
   .btn-ghost:hover { background: var(--surface-edge); }
-  .btn-ghost.danger:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
 
   .transactions { background: var(--surface); border: 1px solid var(--surface-edge); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
   .tx-row { display: grid; grid-template-columns: 90px 130px 1fr 130px 40px; gap: 16px; align-items: center; padding: 14px 22px; border-bottom: 1px solid var(--rule); transition: background 0.15s; }
   .tx-row:last-child { border-bottom: none; }
   .tx-row:hover { background: var(--bg); }
+  .tx-row.pending { opacity: 0.5; }
   .tx-date { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .tx-category { font-size: 12px; color: var(--ink-soft); }
   .tx-category-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
@@ -113,16 +120,22 @@
 <div class="container">
   <header>
     <h1 class="brand">Ledger<span>personal accounting</span></h1>
-    <select class="currency-select" id="currency-select">
-      <option value="BHD">BHD — Bahraini Dinar</option>
-      <option value="USD">USD — US Dollar</option>
-      <option value="EUR">EUR — Euro</option>
-      <option value="GBP">GBP — Pound</option>
-      <option value="SAR">SAR — Saudi Riyal</option>
-      <option value="AED">AED — UAE Dirham</option>
-      <option value="KWD">KWD — Kuwaiti Dinar</option>
-      <option value="INR">INR — Indian Rupee</option>
-    </select>
+    <div class="header-right">
+      <div class="sync-indicator" id="sync-indicator" title="Sync status">
+        <span class="sync-dot" id="sync-dot"></span>
+        <span id="sync-text">Connecting…</span>
+      </div>
+      <select class="currency-select" id="currency-select">
+        <option value="BHD">BHD — Bahraini Dinar</option>
+        <option value="USD">USD — US Dollar</option>
+        <option value="EUR">EUR — Euro</option>
+        <option value="GBP">GBP — Pound</option>
+        <option value="SAR">SAR — Saudi Riyal</option>
+        <option value="AED">AED — UAE Dirham</option>
+        <option value="KWD">KWD — Kuwaiti Dinar</option>
+        <option value="INR">INR — Indian Rupee</option>
+      </select>
+    </div>
   </header>
 
   <div class="summary">
@@ -181,10 +194,7 @@
       <button class="filter-tab" data-filter="all">All time</button>
     </div>
     <div class="data-tools">
-      <button class="btn-ghost" id="export-btn">Export JSON</button>
-      <button class="btn-ghost" id="import-btn">Import</button>
-      <button class="btn-ghost danger" id="clear-btn">Clear all</button>
-      <input type="file" id="import-file" accept=".json" style="display:none">
+      <button class="btn-ghost" id="refresh-btn" title="Pull latest from Google Sheets">↻ Refresh</button>
     </div>
   </div>
 
@@ -197,6 +207,12 @@
 </div>
 
 <script>
+// ============================================================
+// CONFIG — your Google Apps Script Web App URL
+// ============================================================
+const SHEET_API_URL = 'https://script.google.com/macros/s/AKfycbyqzGAAIfMiM5B1PhHh1qQUayf2lSe1lyN1Uatq-sA9aEA942HpgHMKh49K2Uw0kqws-w/exec';
+// ============================================================
+
 const CATEGORIES = {
   expense: [
     { id: 'food', name: 'Food & Groceries', color: '#b8472f' },
@@ -219,7 +235,7 @@ const CURRENCY_SYMBOLS = {
   BHD: 'BD', USD: '$', EUR: '€', GBP: '£', SAR: 'SR', AED: 'AED', KWD: 'KD', INR: '₹'
 };
 
-const STORAGE_KEY = 'ledger_transactions_v1';
+const CACHE_KEY = 'ledger_cache_v2';
 const CURRENCY_KEY = 'ledger_currency_v1';
 
 let state = {
@@ -227,36 +243,72 @@ let state = {
   currency: 'BHD',
   type: 'expense',
   filter: 'month',
+  pendingIds: new Set(),
 };
 
-// ---------- Storage (localStorage) ----------
-function loadState() {
+function setSyncStatus(status, text) {
+  const dot = document.getElementById('sync-dot');
+  const txt = document.getElementById('sync-text');
+  dot.className = 'sync-dot ' + status;
+  txt.textContent = text;
+}
+
+async function apiGet() {
+  const res = await fetch(SHEET_API_URL, { method: 'GET' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  return res.json();
+}
+
+async function apiPost(body) {
+  // Using text/plain to avoid CORS preflight on Apps Script
+  const res = await fetch(SHEET_API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  return res.json();
+}
+
+function loadCache() {
   try {
-    const tx = localStorage.getItem(STORAGE_KEY);
-    if (tx) state.transactions = JSON.parse(tx);
-  } catch (e) { console.warn('Load failed', e); }
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (raw) state.transactions = JSON.parse(raw);
+  } catch (e) { /* ignore */ }
   try {
     const cur = localStorage.getItem(CURRENCY_KEY);
     if (cur) state.currency = cur;
-  } catch (e) { /* first run */ }
+  } catch (e) { /* ignore */ }
 }
 
-function saveTransactions() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.transactions));
-  } catch (e) {
-    alert('Save failed — your browser may have storage disabled or full.');
-    console.error(e);
-  }
+function saveCache() {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify(state.transactions)); }
+  catch (e) { /* ignore */ }
 }
 
 function saveCurrency() {
-  try {
-    localStorage.setItem(CURRENCY_KEY, state.currency);
-  } catch (e) { console.error(e); }
+  try { localStorage.setItem(CURRENCY_KEY, state.currency); }
+  catch (e) { /* ignore */ }
 }
 
-// ---------- Formatting ----------
+async function pullFromSheet() {
+  setSyncStatus('syncing', 'Syncing…');
+  try {
+    const data = await apiGet();
+    state.transactions = (data.transactions || []).map(t => ({
+      ...t,
+      id: Number(t.id),
+      amount: Number(t.amount),
+    }));
+    saveCache();
+    setSyncStatus('synced', 'Synced');
+    renderAll();
+  } catch (err) {
+    console.error('Pull failed', err);
+    setSyncStatus('error', 'Offline (showing cache)');
+  }
+}
+
 function formatAmount(n) {
   const sym = CURRENCY_SYMBOLS[state.currency] || '';
   const decimals = (state.currency === 'BHD' || state.currency === 'KWD') ? 3 : 2;
@@ -277,7 +329,6 @@ function getCategoryMeta(catId) {
   return { name: 'Unknown', color: '#888' };
 }
 
-// ---------- Filtering ----------
 function filteredTransactions() {
   const now = new Date();
   return state.transactions.filter(t => {
@@ -302,7 +353,6 @@ function filterMetaLabel() {
   return labels[state.filter];
 }
 
-// ---------- Rendering ----------
 function renderCategorySelect() {
   const sel = document.getElementById('category');
   sel.innerHTML = '';
@@ -347,8 +397,9 @@ function renderList() {
   list.innerHTML = txs.map(t => {
     const cat = getCategoryMeta(t.category);
     const sign = t.type === 'expense' ? '−' : '+';
+    const pending = state.pendingIds.has(t.id) ? ' pending' : '';
     return `
-      <div class="tx-row">
+      <div class="tx-row${pending}">
         <div class="tx-date">${formatDate(t.date)}</div>
         <div class="tx-category"><span class="tx-category-dot" style="background:${cat.color}"></span>${cat.name}</div>
         <div class="tx-note ${t.note ? '' : 'muted'}">${t.note ? escapeHtml(t.note) : '—'}</div>
@@ -400,8 +451,7 @@ function renderAll() {
   renderBreakdown();
 }
 
-// ---------- Actions ----------
-function addTransaction() {
+async function addTransaction() {
   const amount = parseFloat(document.getElementById('amount').value);
   const category = document.getElementById('category').value;
   const date = document.getElementById('date').value;
@@ -412,25 +462,52 @@ function addTransaction() {
     return;
   }
 
-  state.transactions.push({
+  const tx = {
     id: Date.now(),
     type: state.type,
     amount,
     category,
     date,
     note,
-  });
+  };
 
-  saveTransactions();
+  state.transactions.push(tx);
+  state.pendingIds.add(tx.id);
+  saveCache();
   document.getElementById('amount').value = '';
   document.getElementById('note').value = '';
   renderAll();
+  setSyncStatus('syncing', 'Saving…');
+
+  try {
+    await apiPost({ action: 'add', transaction: tx });
+    state.pendingIds.delete(tx.id);
+    setSyncStatus('synced', 'Synced');
+    renderAll();
+  } catch (err) {
+    console.error('Add failed', err);
+    setSyncStatus('error', 'Save failed — hit ↻ Refresh later');
+  }
 }
 
-function deleteTx(id) {
+async function deleteTx(id) {
+  const before = state.transactions;
   state.transactions = state.transactions.filter(t => t.id !== id);
-  saveTransactions();
+  saveCache();
   renderAll();
+  setSyncStatus('syncing', 'Deleting…');
+
+  try {
+    await apiPost({ action: 'delete', id });
+    setSyncStatus('synced', 'Synced');
+  } catch (err) {
+    console.error('Delete failed', err);
+    state.transactions = before;
+    saveCache();
+    renderAll();
+    setSyncStatus('error', 'Delete failed');
+    alert('Could not delete from Google Sheets. Check your connection.');
+  }
 }
 
 function setType(type) {
@@ -450,51 +527,8 @@ function setFilter(filter) {
   renderAll();
 }
 
-function exportJSON() {
-  const data = JSON.stringify({ currency: state.currency, transactions: state.transactions }, null, 2);
-  const blob = new Blob([data], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  const stamp = new Date().toISOString().split('T')[0];
-  a.download = `ledger-${stamp}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-function importJSON(file) {
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    try {
-      const data = JSON.parse(e.target.result);
-      if (!Array.isArray(data.transactions)) throw new Error('Invalid file');
-      if (!confirm(`Import ${data.transactions.length} transactions? This will replace your current data.`)) return;
-      state.transactions = data.transactions;
-      if (data.currency) {
-        state.currency = data.currency;
-        document.getElementById('currency-select').value = data.currency;
-        saveCurrency();
-      }
-      saveTransactions();
-      renderAll();
-    } catch (err) {
-      alert('Could not read that file. Make sure it was exported from Ledger.');
-    }
-  };
-  reader.readAsText(file);
-}
-
-function clearAll() {
-  if (!confirm('Delete ALL transactions? This cannot be undone. Consider exporting first.')) return;
-  if (!confirm('Are you absolutely sure?')) return;
-  state.transactions = [];
-  saveTransactions();
-  renderAll();
-}
-
-// ---------- Init ----------
 function init() {
-  loadState();
+  loadCache();
 
   document.getElementById('date').value = new Date().toISOString().split('T')[0];
 
@@ -517,16 +551,12 @@ function init() {
   document.getElementById('amount').addEventListener('keydown', (e) => { if (e.key === 'Enter') addTransaction(); });
   document.getElementById('note').addEventListener('keydown', (e) => { if (e.key === 'Enter') addTransaction(); });
 
-  document.getElementById('export-btn').addEventListener('click', exportJSON);
-  document.getElementById('import-btn').addEventListener('click', () => document.getElementById('import-file').click());
-  document.getElementById('import-file').addEventListener('change', (e) => {
-    if (e.target.files[0]) importJSON(e.target.files[0]);
-    e.target.value = '';
-  });
-  document.getElementById('clear-btn').addEventListener('click', clearAll);
+  document.getElementById('refresh-btn').addEventListener('click', pullFromSheet);
 
   renderCategorySelect();
   renderAll();
+
+  pullFromSheet();
 }
 
 init();
