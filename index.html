@@ -20,6 +20,8 @@
     --accent-soft: #f3e3dc;
     --positive: #2d5a3f;
     --positive-soft: #dbe7df;
+    --invest: #2c4a7a;
+    --invest-soft: #dce4f0;
     --rule: #e8e0cf;
     --shadow: 0 1px 0 rgba(26, 20, 16, 0.04), 0 4px 16px rgba(26, 20, 16, 0.04);
   }
@@ -40,12 +42,14 @@
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
   .currency-select { background: transparent; border: 1px solid var(--rule); border-radius: 6px; padding: 6px 10px; font-family: 'Geist', sans-serif; font-size: 13px; color: var(--ink-soft); cursor: pointer; }
 
-  .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 36px; }
+  .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 36px; }
   .card { background: var(--surface); border: 1px solid var(--surface-edge); border-radius: 12px; padding: 20px 22px; box-shadow: var(--shadow); }
   .card-label { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; margin-bottom: 10px; }
   .card-value { font-family: 'Fraunces', serif; font-size: 32px; font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
   .card-value.expense { color: var(--accent); }
   .card-value.income { color: var(--positive); }
+  .card-value.investment { color: var(--invest); }
+  .card.invest-card { border-color: var(--invest-soft); }
   .card-meta { font-size: 12px; color: var(--muted); margin-top: 6px; }
 
   .add-section { background: var(--surface); border: 1px solid var(--surface-edge); border-radius: 12px; padding: 22px; margin-bottom: 36px; box-shadow: var(--shadow); }
@@ -60,6 +64,7 @@
   .type-toggle button { flex: 1; background: transparent; border: none; padding: 7px 6px; font-family: 'Geist', sans-serif; font-size: 13px; color: var(--muted); cursor: pointer; border-radius: 6px; font-weight: 500; transition: all 0.15s; white-space: nowrap; }
   .type-toggle button.active.expense { background: var(--accent); color: white; }
   .type-toggle button.active.income { background: var(--positive); color: white; }
+  .type-toggle button.active.investment { background: var(--invest); color: white; }
   .btn-primary { background: var(--ink); color: var(--bg); border: none; border-radius: 8px; padding: 11px 18px; font-family: 'Geist', sans-serif; font-size: 14px; font-weight: 500; cursor: pointer; transition: opacity 0.15s; }
   .btn-primary:hover { opacity: 0.85; }
   .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -86,6 +91,7 @@
   .tx-amount { font-family: 'Fraunces', serif; font-size: 17px; font-weight: 400; text-align: right; font-variant-numeric: tabular-nums; }
   .tx-amount.expense { color: var(--accent); }
   .tx-amount.income { color: var(--positive); }
+  .tx-amount.investment { color: var(--invest); }
   .tx-delete { background: transparent; border: none; color: var(--muted-soft); cursor: pointer; font-size: 18px; padding: 4px; border-radius: 4px; transition: color 0.15s; }
   .tx-delete:hover { color: var(--accent); }
 
@@ -104,7 +110,7 @@
   @media (max-width: 720px) {
     body { padding: 20px 14px 60px; }
     .brand { font-size: 28px; }
-    .summary { grid-template-columns: 1fr; gap: 12px; }
+    .summary { grid-template-columns: 1fr 1fr; gap: 12px; }
     .form-row { grid-template-columns: 1fr 1fr; }
     .form-row .field:nth-child(3) { grid-column: 1 / -1; }
     .form-row .btn-primary { grid-column: 1 / -1; }
@@ -154,6 +160,11 @@
       <div class="card-value" id="sum-balance">—</div>
       <div class="card-meta" id="meta-balance">net</div>
     </div>
+    <div class="card invest-card">
+      <div class="card-label">Invested</div>
+      <div class="card-value investment" id="sum-invested">—</div>
+      <div class="card-meta" id="meta-invested">this period</div>
+    </div>
   </div>
 
   <div class="add-section">
@@ -164,6 +175,7 @@
         <div class="type-toggle">
           <button id="type-expense" class="active expense" data-type="expense">Expense</button>
           <button id="type-income" data-type="income">Income</button>
+          <button id="type-investment" data-type="investment">Invest</button>
         </div>
       </div>
       <div class="field">
@@ -228,6 +240,14 @@ const CATEGORIES = {
     { id: 'freelance', name: 'Freelance', color: '#3f7a5a' },
     { id: 'gift', name: 'Gift', color: '#5a9b7a' },
     { id: 'other-income', name: 'Other', color: '#7aab8a' },
+  ],
+  investment: [
+    { id: 'stocks', name: 'Stocks', color: '#2c4a7a' },
+    { id: 'crypto', name: 'Crypto', color: '#4a6a9a' },
+    { id: 'funds', name: 'Funds / ETFs', color: '#3a5a8a' },
+    { id: 'real-estate', name: 'Real Estate', color: '#1e3a6a' },
+    { id: 'savings', name: 'Savings', color: '#5a7aaa' },
+    { id: 'other-invest', name: 'Other', color: '#6a8aba' },
   ],
 };
 
@@ -322,7 +342,7 @@ function formatDate(iso) {
 }
 
 function getCategoryMeta(catId) {
-  for (const type of ['expense', 'income']) {
+  for (const type of ['expense', 'income', 'investment']) {
     const found = CATEGORIES[type].find(c => c.id === catId);
     if (found) return found;
   }
@@ -368,10 +388,12 @@ function renderSummary() {
   const txs = filteredTransactions();
   const income = txs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
   const expenses = txs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
-  const balance = income - expenses;
+  const invested = txs.filter(t => t.type === 'investment').reduce((s, t) => s + t.amount, 0);
+  const balance = income - expenses - invested;
 
   document.getElementById('sum-income').textContent = formatAmount(income);
   document.getElementById('sum-expenses').textContent = formatAmount(expenses);
+  document.getElementById('sum-invested').textContent = formatAmount(invested);
   const balEl = document.getElementById('sum-balance');
   balEl.textContent = (balance < 0 ? '-' : '') + formatAmount(balance);
   balEl.style.color = balance < 0 ? 'var(--accent)' : 'var(--ink)';
@@ -379,6 +401,7 @@ function renderSummary() {
   const label = filterMetaLabel();
   document.getElementById('meta-income').textContent = label;
   document.getElementById('meta-expenses').textContent = label;
+  document.getElementById('meta-invested').textContent = label;
   document.getElementById('meta-balance').textContent = balance >= 0 ? 'surplus' : 'deficit';
 }
 
@@ -396,7 +419,7 @@ function renderList() {
 
   list.innerHTML = txs.map(t => {
     const cat = getCategoryMeta(t.category);
-    const sign = t.type === 'expense' ? '−' : '+';
+    const sign = t.type === 'expense' ? '−' : t.type === 'investment' ? '↗' : '+';
     const pending = state.pendingIds.has(t.id) ? ' pending' : '';
     return `
       <div class="tx-row${pending}">
@@ -512,10 +535,12 @@ async function deleteTx(id) {
 
 function setType(type) {
   state.type = type;
-  document.getElementById('type-expense').classList.toggle('active', type === 'expense');
-  document.getElementById('type-expense').classList.toggle('expense', type === 'expense');
-  document.getElementById('type-income').classList.toggle('active', type === 'income');
-  document.getElementById('type-income').classList.toggle('income', type === 'income');
+  ['expense', 'income', 'investment'].forEach(t => {
+    const btn = document.getElementById('type-' + t);
+    btn.classList.toggle('active', type === t);
+    btn.classList.toggle(t, type === t);
+    if (type !== t) btn.classList.remove(t);
+  });
   renderCategorySelect();
 }
 
@@ -542,6 +567,7 @@ function init() {
 
   document.getElementById('type-expense').addEventListener('click', () => setType('expense'));
   document.getElementById('type-income').addEventListener('click', () => setType('income'));
+  document.getElementById('type-investment').addEventListener('click', () => setType('investment'));
 
   document.querySelectorAll('.filter-tab').forEach(btn => {
     btn.addEventListener('click', () => setFilter(btn.dataset.filter));
