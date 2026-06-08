@@ -242,12 +242,7 @@ const CATEGORIES = {
     { id: 'other-income', name: 'Other', color: '#7aab8a' },
   ],
   investment: [
-    { id: 'stocks', name: 'Stocks', color: '#2c4a7a' },
-    { id: 'crypto', name: 'Crypto', color: '#4a6a9a' },
-    { id: 'funds', name: 'Funds / ETFs', color: '#3a5a8a' },
-    { id: 'real-estate', name: 'Real Estate', color: '#1e3a6a' },
-    { id: 'savings', name: 'Savings', color: '#5a7aaa' },
-    { id: 'other-invest', name: 'Other', color: '#6a8aba' },
+    { id: 'investment', name: 'Investment', color: '#2c4a7a' },
   ],
 };
 
@@ -373,6 +368,24 @@ function filterMetaLabel() {
   return labels[state.filter];
 }
 
+function getCarryover() {
+  if (state.filter === 'all') return 0;
+  const now = new Date();
+  let cutoff;
+  if (state.filter === 'month') {
+    cutoff = new Date(now.getFullYear(), now.getMonth(), 1);
+  } else if (state.filter === 'last-month') {
+    cutoff = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  } else if (state.filter === 'year') {
+    cutoff = new Date(now.getFullYear(), 0, 1);
+  }
+  const prior = state.transactions.filter(t => new Date(t.date) < cutoff);
+  const inc = prior.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+  const exp = prior.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+  const inv = prior.filter(t => t.type === 'investment').reduce((s, t) => s + t.amount, 0);
+  return inc - exp - inv;
+}
+
 function renderCategorySelect() {
   const sel = document.getElementById('category');
   sel.innerHTML = '';
@@ -389,9 +402,11 @@ function renderSummary() {
   const income = txs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
   const expenses = txs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
   const invested = txs.filter(t => t.type === 'investment').reduce((s, t) => s + t.amount, 0);
-  const balance = income - expenses - invested;
+  const carryover = getCarryover();
+  const effectiveIncome = income + carryover;
+  const balance = effectiveIncome - expenses - invested;
 
-  document.getElementById('sum-income').textContent = formatAmount(income);
+  document.getElementById('sum-income').textContent = formatAmount(effectiveIncome);
   document.getElementById('sum-expenses').textContent = formatAmount(expenses);
   document.getElementById('sum-invested').textContent = formatAmount(invested);
   const balEl = document.getElementById('sum-balance');
@@ -399,7 +414,10 @@ function renderSummary() {
   balEl.style.color = balance < 0 ? 'var(--accent)' : 'var(--ink)';
 
   const label = filterMetaLabel();
-  document.getElementById('meta-income').textContent = label;
+  const carryLabel = carryover !== 0
+    ? `${label} · ${carryover >= 0 ? '+' : ''}${formatAmount(carryover)} carried over`
+    : label;
+  document.getElementById('meta-income').textContent = carryLabel;
   document.getElementById('meta-expenses').textContent = label;
   document.getElementById('meta-invested').textContent = label;
   document.getElementById('meta-balance').textContent = balance >= 0 ? 'surplus' : 'deficit';
